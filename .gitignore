@@ -1,3 +1,4 @@
 db_config.py
 *.json
 .DS_Sore
+__pycache__
