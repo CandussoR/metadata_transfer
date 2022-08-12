@@ -22,8 +22,5 @@ for book in book_ids:
         'pubdate': pub_date
     })
 
-json_books = json.dumps(books, ensure_ascii=False)
-print(json_books)
-
 with open('json_books.json', 'w') as outfile:
-    json.dump(json_books, outfile, ensure_ascii=False)
+    json.dump(books, outfile, ensure_ascii=False)
