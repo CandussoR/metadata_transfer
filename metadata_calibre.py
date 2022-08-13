@@ -13,12 +13,8 @@ def book_authors_initial(books_list):
     authors in the same string : we might use this when we check the existence of 
     a folder when moving the files after data have been inserted in the database.
     '''
-    return set([ author 
-                for book in books_list 
-                for author in book['author'] 
-                ])
-
-initial_authors_set = book_authors_initial(books)
+    return set([ author for book in books_list 
+                        for author in book['author'] ])
 
 def splitting_authors(books_list):
     '''For every book in the book list, splits the multiple authors 
@@ -55,8 +51,6 @@ mysql_conn_params = {
     'database' : conf.db_name
 }
 
-mysql_db = ms.connect(**mysql_conn_params)
-
 # Queries I will have to use in DB
 AUTHOR_EXISTENCE = ("SELECT id, full_name FROM authors "
                     "WHERE full_name = %s")
@@ -72,22 +66,41 @@ INSERT_BOOK = "INSERT INTO ebooks (title, year_of_publication, publisher_id) VAL
 def insert_unfound(query, iterable, dict):
     connexion =  ms.connect(**mysql_conn_params)
     cursor = connexion.cursor(buffered=True)
+
     for value in iterable:
         if value not in dict.keys():
             try:
                 cursor.execute(query, (value, ))
             except:
                 print("Oops! Value already there !")
+
     connexion.commit()
     connexion.close()
+
 
 def create_dictionary(query, iterable):
     dictionary = {}
     connexion =  ms.connect(**mysql_conn_params)
     cursor = connexion.cursor(buffered=True)
+
     for value in iterable:
         cursor.execute(query, (value, ))
         for id, name in cursor:
             dictionary[name] = id
+
     connexion.close()
     return dictionary 
+
+authors_dict = create_dictionary(AUTHOR_EXISTENCE, authors_set)
+genres_dict = create_dictionary(GENRE_EXISTENCE, genre_set_funct)
+publishers_dict = create_dictionary(PUBLISHER_EXISTENCE, publishers_set)
+
+def strings_to_id_lists(data_list):
+    for obj in data_list:
+        obj['author'] = [authors_dict[k] for k in obj['author']]
+        obj['tags'] = [genres_dict[k] for k in obj['tags']]
+        obj['publisher'] = publishers_dict[obj['publisher']]
+    return data_list
+
+data_prepared = strings_to_id_lists(authors_splitted_books)
+print(data_prepared)
