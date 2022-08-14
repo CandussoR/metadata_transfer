@@ -52,16 +52,21 @@ mysql_conn_params = {
 }
 
 # Queries I will have to use in DB
+TITLE_EXISTENCE = "SELECT id, full_name FROM ebooks WHERE title IN %s"
 AUTHOR_EXISTENCE = ("SELECT id, full_name FROM authors "
                     "WHERE full_name = %s")
 PUBLISHER_EXISTENCE = ("SELECT publisher_id, publisher_name FROM publishers "
                        "WHERE publisher_name = %s")
 GENRE_EXISTENCE = ("SELECT id, genre FROM genre "
                    "WHERE genre = %s")
+TITLE_EXISTENCE = ""
 INSERT_AUTHOR_NAME = "INSERT INTO authors (full_name) VALUES (%s)"
 INSERT_PUBLISHER_NAME = "INSERT INTO publishers (publisher_name) VALUES (%s)"
 INSERT_GENRE = "INSERT INTO authors (full_name) VALUES (%s)"
 INSERT_BOOK = "INSERT INTO ebooks (title, year_of_publication, publisher_id) VALUES (%s, %s, %s);"
+GET_TITLE_ID = ("SELECT id FROM ebooks WHERE title = %s")
+INSERT_EBOOK_GENRE = "INSERT INTO ebooks_genres (ebook_id, genre_id) VALUES (%s, %s)"
+INSERT_EBOOK_AUTHOR = "INSERT INTO ebooks_authors (ebook_id, author_id) VALUES (%s, %s)"
 
 def insert_unfound(query, iterable, dict):
     connexion =  ms.connect(**mysql_conn_params)
@@ -79,6 +84,10 @@ def insert_unfound(query, iterable, dict):
 
 
 def create_dictionary(query, iterable):
+    '''
+    Creates a dictionary out of the sets taken from the book list. The dictionary
+    only contains values present in a database, and needs to be followed by
+    '''
     dictionary = {}
     connexion =  ms.connect(**mysql_conn_params)
     cursor = connexion.cursor(buffered=True)
@@ -96,6 +105,9 @@ genres_dict = create_dictionary(GENRE_EXISTENCE, genre_set_funct)
 publishers_dict = create_dictionary(PUBLISHER_EXISTENCE, publishers_set)
 
 def strings_to_id_lists(data_list):
+    '''
+    Since only three fields (authors, tags and publisher) are to be modified,
+    they are hard-coded.'''
     for obj in data_list:
         obj['author'] = [authors_dict[k] for k in obj['author']]
         obj['tags'] = [genres_dict[k] for k in obj['tags']]
@@ -104,3 +116,52 @@ def strings_to_id_lists(data_list):
 
 data_prepared = strings_to_id_lists(authors_splitted_books)
 print(data_prepared)
+
+# Last part : 
+# Make the initial insertion of the book in ebooks, and get its id.
+# Then we'll use this id in two new tables : ebook_authors, ebook_genres.
+
+def title_check(query, iterable):
+    connexion =  ms.connect(**mysql_conn_params)
+    cursor = connexion.cursor(buffered=True)
+
+    already_there = {}
+    for value in iterable:
+        cursor.execute(query, (value,))
+        for id, value in cursor:
+            already_there[value] = id
+    
+    cursor.close()
+    connexion.close()
+    return already_there if already_there else False 
+            
+def book_insert(book, query):
+    with ms.connect(**mysql_conn_params) as connexion:
+        with connexion.cursor(buffered=True) as cursor:
+            cursor.execute(query, (book['title'], book['pubdate'], book['publisher']))
+            connexion.commit()
+
+def book_id(query, title):
+    with ms.connect(**mysql_conn_params) as connexion:
+        with connexion.cursor(buffered=True) as cursor:
+            cursor.execute(query, (title,))
+            for book_id in cursor:
+                return book_id[0]
+
+def create_book_genre_tuple(book_id, *id_list):
+    return [(book_id, id) for id in id_list]
+
+def insert_tuples(query, *tuple):
+    with ms.connect(**mysql_conn_params) as connexion:
+        with connexion.cursor(buffered=True) as cursor:
+            cursor.execute(query, (tuple[0][0], tuple[0][1]))
+            connexion.commit()
+
+def prepared_data_insertion(data):
+    for book in data_prepared:
+        book_insert(book, INSERT_BOOK)
+        id = book_id(GET_TITLE_ID, book['title'])
+        book_genre_tuples = create_book_genre_tuple(id, *book['tags'])
+        insert_tuples(INSERT_EBOOK_GENRE, *book_genre_tuples)
+        book_author_tuples = create_book_genre_tuple(id, *book['author'])
+        insert_tuples(INSERT_EBOOK_AUTHOR, *book_author_tuples)
