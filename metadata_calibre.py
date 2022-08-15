@@ -7,15 +7,6 @@ import json
 with open('json_books.json') as file:
     books = json.load(file)
 
-def book_authors_initial(books_list):
-    '''
-    Gets the unmutated author. Books with more than one author will find all the
-    authors in the same string : we might use this when we check the existence of 
-    a folder when moving the files after data have been inserted in the database.
-    '''
-    return set([ author for book in books_list 
-                        for author in book['author'] ])
-
 def splitting_authors(books_list):
     '''For every book in the book list, splits the multiple authors 
     and set the author field as a list of every individual authors
@@ -26,22 +17,8 @@ def splitting_authors(books_list):
                 book['author'] = author.split(', ')
     return books_list
 
-def create_genre_set(books_list):
-    return { genre for book in books_list for genre in book['tags']}
-
-# Get the sets to create dictionaries and prepare data before it's insertion
-# So that it limitates the number of requests necessary
-initial_authors_set = book_authors_initial(books)
-
-authors_splitted_books = splitting_authors(books)
-
-authors_set = { author 
-                for book in splitting_authors(books) 
-                for author in book['author'] }
-
-publishers_set = { book['publisher'] for book in books }
-
-genre_set_funct = create_genre_set(books)
+def create_set_from_list(books_list, field):
+    return { item for book in books_list for item in book[field] }
 
 # Switching to the mySql database
 mysql_conn_params = {
@@ -59,7 +36,6 @@ PUBLISHER_EXISTENCE = ("SELECT publisher_id, publisher_name FROM publishers "
                        "WHERE publisher_name = %s")
 GENRE_EXISTENCE = ("SELECT id, genre FROM genre "
                    "WHERE genre = %s")
-TITLE_EXISTENCE = ""
 INSERT_AUTHOR_NAME = "INSERT INTO authors (full_name) VALUES (%s)"
 INSERT_PUBLISHER_NAME = "INSERT INTO publishers (publisher_name) VALUES (%s)"
 INSERT_GENRE = "INSERT INTO authors (full_name) VALUES (%s)"
@@ -68,8 +44,22 @@ GET_TITLE_ID = ("SELECT id FROM ebooks WHERE title = %s")
 INSERT_EBOOK_GENRE = "INSERT INTO ebooks_genres (ebook_id, genre_id) VALUES (%s, %s)"
 INSERT_EBOOK_AUTHOR = "INSERT INTO ebooks_authors (ebook_id, author_id) VALUES (%s, %s)"
 
-def insert_unfound(query, iterable, dict):
-    connexion =  ms.connect(**mysql_conn_params)
+def create_dictionary(connexion, query, iterable):
+    '''
+    Creates a dictionary out of the sets taken from the book list. The dictionary
+    only contains values present in a database, and needs to be followed by
+    '''
+    dictionary = {}
+    cursor = connexion.cursor(buffered=True)
+
+    for value in iterable:
+        cursor.execute(query, (value, ))
+        for id, name in cursor:
+            dictionary[name] = id
+
+    return dictionary 
+
+def insert_unfound(connexion, query, iterable, dict):
     cursor = connexion.cursor(buffered=True)
 
     for value in iterable:
@@ -80,31 +70,24 @@ def insert_unfound(query, iterable, dict):
                 print("Oops! Value already there !")
 
     connexion.commit()
-    connexion.close()
 
-
-def create_dictionary(query, iterable):
+def append_dictionary(connexion, query, iterable, dictionary):
     '''
     Creates a dictionary out of the sets taken from the book list. The dictionary
     only contains values present in a database, and needs to be followed by
     '''
     dictionary = {}
-    connexion =  ms.connect(**mysql_conn_params)
     cursor = connexion.cursor(buffered=True)
 
     for value in iterable:
         cursor.execute(query, (value, ))
         for id, name in cursor:
-            dictionary[name] = id
+            if name not in dictionary:
+                dictionary[name] = id
 
-    connexion.close()
     return dictionary 
 
-authors_dict = create_dictionary(AUTHOR_EXISTENCE, authors_set)
-genres_dict = create_dictionary(GENRE_EXISTENCE, genre_set_funct)
-publishers_dict = create_dictionary(PUBLISHER_EXISTENCE, publishers_set)
-
-def strings_to_id_lists(data_list):
+def strings_to_id_lists(data_list, authors_dict, genres_dict, publishers_dict):
     '''
     Since only three fields (authors, tags and publisher) are to be modified,
     they are hard-coded.'''
@@ -113,9 +96,6 @@ def strings_to_id_lists(data_list):
         obj['tags'] = [genres_dict[k] for k in obj['tags']]
         obj['publisher'] = publishers_dict[obj['publisher']]
     return data_list
-
-data_prepared = strings_to_id_lists(authors_splitted_books)
-print(data_prepared)
 
 # Last part : 
 # Make the initial insertion of the book in ebooks, and get its id.
@@ -157,8 +137,36 @@ def insert_tuples(query, *tuple):
             cursor.execute(query, (tuple[0][0], tuple[0][1]))
             connexion.commit()
 
+def prepare_data(connexion, data_file):
+    with open(data_file) as file:
+        books = json.load(file)
+    authors_splitted_books = splitting_authors(books)
+
+    # Creating sets for following dictionary constitution with mysql
+    authors_set = create_set_from_list(authors_splitted_books, 'author')
+    genre_set = create_set_from_list(authors_splitted_books, 'tags')
+    publishers_set = { book['publisher'] for book in authors_splitted_books }
+
+    #Creating dict, inserting, appending to dicts
+    a_d = create_dictionary(connexion, AUTHOR_EXISTENCE, authors_set)
+    insert_unfound(connexion, INSERT_AUTHOR_NAME, authors_set, a_d)
+    append_dictionary(connexion, AUTHOR_EXISTENCE, authors_set, a_d)
+
+    g_d = create_dictionary(connexion, GENRE_EXISTENCE, genre_set)
+    insert_unfound(connexion, INSERT_GENRE, genre_set, g_d)
+    append_dictionary(connexion, GENRE_EXISTENCE, genre_set, g_d)
+
+    p_d = create_dictionary(connexion, PUBLISHER_EXISTENCE, publishers_set)
+    insert_unfound(connexion, INSERT_PUBLISHER_NAME, publishers_set, p_d)
+    append_dictionary(connexion, PUBLISHER_EXISTENCE, authors_set, p_d)
+
+    # Reverting values in the list of books
+    strings_to_id_lists(authors_splitted_books, a_d, g_d, p_d)
+
+    return authors_splitted_books
+
 def prepared_data_insertion(data):
-    for book in data_prepared:
+    for book in data:
         book_insert(book, INSERT_BOOK)
         id = book_id(GET_TITLE_ID, book['title'])
         book_genre_tuples = create_book_genre_tuple(id, *book['tags'])
