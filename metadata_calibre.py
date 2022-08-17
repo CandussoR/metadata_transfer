@@ -79,11 +79,12 @@ def append_dictionary(connexion, query, iterable, dictionary):
     cursor = connexion.cursor(buffered=True)
 
     new_iterable = list(filter(lambda x: x not in dictionary, iterable))
+    
     for value in new_iterable:
         cursor.execute(query, (value, ))
         for id, name in cursor:
             dictionary[name] = id
-    print(dictionary)
+
     return dictionary 
 
 def strings_to_id_lists(data_list, authors_dict, genres_dict, publishers_dict):
@@ -128,8 +129,9 @@ def create_book_genre_tuple(book_id, *id_list):
 
 def insert_tuples(connexion, query, iterable):
     with connexion.cursor(buffered=True) as cursor:
-        for tuple in iterable:
-            cursor.execute(query, (tuple[0][0], tuple[0][1]))
+        for couple in iterable:
+            print(couple)
+            cursor.execute(query, couple)
             connexion.commit()
 
 def book_not_present(connexion, book_list):
@@ -166,7 +168,7 @@ def prepare_data_for_insertion(connexion, data_file):
 
         # Reverting values in the list of books
         strings_to_id_lists(books, a_d, g_d, p_d)
-
+        
         return books
 
 def data_insertion(connexion, data):
