@@ -60,11 +60,11 @@ def create_dictionary(connexion, query, iterable):
 
     return dictionary 
 
-def insert_unfound(connexion, query, iterable, dict):
+def insert_unfound(connexion, query, iterable, dictionary):
     cursor = connexion.cursor(buffered=True)
 
     for value in iterable:
-        if value not in dict.keys():
+        if (value not in dictionary.keys()) or (not dictionary):
             try:
                 cursor.execute(query, (value, ))
             except:
@@ -76,15 +76,14 @@ def append_dictionary(connexion, query, iterable, dictionary):
     '''
     Updates create dictionary so every book data gets its id.
     '''
-    dictionary = {}
     cursor = connexion.cursor(buffered=True)
 
-    for value in iterable:
+    new_iterable = list(filter(lambda x: x not in dictionary, iterable))
+    for value in new_iterable:
         cursor.execute(query, (value, ))
         for id, name in cursor:
-            if name not in dictionary:
-                dictionary[name] = id
-
+            dictionary[name] = id
+    print(dictionary)
     return dictionary 
 
 def strings_to_id_lists(data_list, authors_dict, genres_dict, publishers_dict):
@@ -106,7 +105,6 @@ def title_check(connexion, query, iterable):
 
     already_there = {}
     for value in iterable:
-        print(value)
         cursor.execute(query, (value,))
         for id, value in cursor:
             already_there[value] = id
@@ -128,8 +126,9 @@ def book_id(connexion, query, title):
 def create_book_genre_tuple(book_id, *id_list):
     return [(book_id, id) for id in id_list]
 
-def insert_tuples(connexion, query, *tuple):
-        with connexion.cursor(buffered=True) as cursor:
+def insert_tuples(connexion, query, iterable):
+    with connexion.cursor(buffered=True) as cursor:
+        for tuple in iterable:
             cursor.execute(query, (tuple[0][0], tuple[0][1]))
             connexion.commit()
 
@@ -176,10 +175,10 @@ def data_insertion(connexion, data):
         id = book_id(connexion, GET_TITLE_ID, book['title'])
         book_genre_tuples = create_book_genre_tuple(id, *book['tags'])
         print(book_genre_tuples)
-        insert_tuples(connexion, INSERT_EBOOK_GENRE, *book_genre_tuples)
+        insert_tuples(connexion, INSERT_EBOOK_GENRE, book_genre_tuples)
         book_author_tuples = create_book_genre_tuple(id, *book['author'])
         print(book_author_tuples)
-        insert_tuples(connexion, INSERT_EBOOK_AUTHOR, *book_author_tuples)
+        insert_tuples(connexion, INSERT_EBOOK_AUTHOR, book_author_tuples)
 
 
 connexion = ms.connect(**mysql_conn_params)
