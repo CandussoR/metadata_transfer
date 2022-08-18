@@ -62,14 +62,8 @@ def create_dictionary(connexion, query, iterable):
 
 def insert_unfound(connexion, query, iterable, dictionary):
     cursor = connexion.cursor(buffered=True)
-
     for value in iterable:
-        if (value not in dictionary.keys()) or (not dictionary):
-            try:
-                cursor.execute(query, (value, ))
-            except:
-                print("Oops! Value already there !")
-
+        cursor.execute(query, (value, ))
     connexion.commit()
 
 def append_dictionary(connexion, query, iterable, dictionary):
@@ -85,7 +79,7 @@ def append_dictionary(connexion, query, iterable, dictionary):
         for id, name in cursor:
             dictionary[name] = id
 
-    return dictionary 
+        return dictionary 
 
 def strings_to_id_lists(data_list, authors_dict, genres_dict, publishers_dict):
     '''
@@ -124,13 +118,12 @@ def book_id(connexion, query, title):
         for book_id in cursor:
             return book_id[0]
 
-def create_book_genre_tuple(book_id, *id_list):
+def create_tuple(book_id, *id_list):
     return [(book_id, id) for id in id_list]
 
 def insert_tuples(connexion, query, iterable):
     with connexion.cursor(buffered=True) as cursor:
         for couple in iterable:
-            print(couple)
             cursor.execute(query, couple)
             connexion.commit()
 
@@ -175,15 +168,14 @@ def data_insertion(connexion, data):
     for book in data:
         book_insert(connexion, book, INSERT_BOOK)
         id = book_id(connexion, GET_TITLE_ID, book['title'])
-        book_genre_tuples = create_book_genre_tuple(id, *book['tags'])
-        print(book_genre_tuples)
+        book_genre_tuples = create_tuple(id, *book['tags'])
         insert_tuples(connexion, INSERT_EBOOK_GENRE, book_genre_tuples)
-        book_author_tuples = create_book_genre_tuple(id, *book['author'])
-        print(book_author_tuples)
+        book_author_tuples = create_tuple(id, *book['author'])
         insert_tuples(connexion, INSERT_EBOOK_AUTHOR, book_author_tuples)
 
 
 connexion = ms.connect(**mysql_conn_params)
 prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
 data_insertion(connexion, prep_data)
+print("C'est dans la db!")
 connexion.close()
