@@ -62,9 +62,10 @@ def create_dictionary(connexion, query, iterable):
 
 def insert_unfound(connexion, query, iterable, dictionary):
     cursor = connexion.cursor(buffered=True)
-    for value in iterable:
-        cursor.execute(query, (value, ))
-    connexion.commit()
+    for value in iterable :
+        if value not in dictionary:
+            cursor.execute(query, (value, ))
+            connexion.commit()
 
 def append_dictionary(connexion, query, iterable, dictionary):
     '''
