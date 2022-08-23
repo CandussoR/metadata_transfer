@@ -1,12 +1,18 @@
 # This part of the script will prepare the data for its insertion in mysql.
 
-from db_config import mysql_conn_params
+from config import mysql_conn_params
 import mysql.connector as ms
 import json
 
+def main():
+    connexion = ms.connect(**mysql_conn_params)
+    prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
+    data_insertion(connexion, prep_data)
+    print("C'est dans la db!")
+    connexion.close()
+
 def prepare_data_for_insertion(connexion, data_file):
-    with open(data_file) as file:
-        books_init = json.load(file)
+    books_init = load_file(data_file)
 
     if (books := book_not_present(connexion, books_init)):
         # Individualise authors initially grouped by book
@@ -25,6 +31,10 @@ def prepare_data_for_insertion(connexion, data_file):
         # Swapping data in the list of books
         strings_to_id_lists(books, authors_dict, genres_dict, publishers_dict)
         return books
+
+def load_file(data_file):
+    with open(data_file) as file:
+        return json.load(file)
 
 def book_not_present(connexion, book_list):
     title_dict = title_check(connexion, [ [book['title'].lower(), book['author']] for book in book_list])
@@ -185,8 +195,5 @@ def insert_tuples(connexion, relation, iterable):
             cursor.execute(query, couple)
             connexion.commit()
 
-connexion = ms.connect(**mysql_conn_params)
-prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
-data_insertion(connexion, prep_data)
-print("C'est dans la db!")
-connexion.close()
+if __name__ == "__main__":
+    main()
