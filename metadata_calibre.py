@@ -3,12 +3,17 @@
 from config import mysql_conn_params
 import mysql.connector as ms
 import json
+from sys import exit
 
 def main():
     connexion = ms.connect(**mysql_conn_params)
-    prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
-    data_insertion(connexion, prep_data)
-    print("C'est dans la db!")
+    try:
+        prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
+        data_insertion(connexion, prep_data)
+        print("C'est dans la db!")
+    except:
+        print("Houston on a eu un problème, on arrête tout!")
+        exit()
     connexion.close()
 
 def prepare_data_for_insertion(connexion, data_file):
@@ -41,11 +46,15 @@ def book_not_present(connexion, book_list):
     return list(filter(lambda x: x['title'].lower() not in title_dict, book_list))
 
 def title_check(connexion, iterable):
+    '''
+    Collected works often have the same general title, so we need to check the author(s).
+    '''
     cursor = connexion.cursor(buffered=True)
     title_query = "SELECT id FROM ebooks WHERE title IN (%s)"
     already_there = {}
 
     for title, author in iterable:
+        print(author)
         cursor.execute(title_query, (title,))
         for id in cursor:
             if check_same_author(connexion, id[0], author):
@@ -54,6 +63,7 @@ def title_check(connexion, iterable):
     return already_there
 
 def check_same_author(connexion, id, author):
+    print(f"author: {author}")
     query = '''SELECT full_name
                     FROM (SELECT id, title FROM ebooks
                         WHERE id = %s) e
@@ -63,10 +73,20 @@ def check_same_author(connexion, id, author):
                         ON a.id = ea.author_id;'''
     cursor = connexion.cursor(buffered=True)
     cursor.execute(query, (id,))
-    for name in cursor:
-        for auth in author:
-            if name[0] == auth:
-                return id
+    
+    if cursor.rowcount == 1:
+        for name in cursor:
+            for auth in author:
+                if name[0] == auth:
+                    return id
+    
+    elif cursor.rowcount > 1:
+        db_authors = sorted([name[0] for name in cursor])
+        authors = sorted(author[0].split(', '))
+        if db_authors == authors:
+            return id
+
+
 
 def splitting_authors(books_list):
     '''For every book in the book list, splits the multiple authors 
@@ -93,8 +113,8 @@ def return_complete_dict(connexion, field, field_set):
             insert_unfound(connexion, insert_query, field_set, field_dict)
         except:
             print(f"Quelque chose cloche dans les métadonnées. Le set et le dict devraient probablement être identiques mais ne le sont pas.\n\
-                Le set: {field_set}\n\
-                Le dict: {set(field_dict.keys())}\n")
+                Les auteurs qui sont dans l'un mais pas dans l'autre: \n\
+                {[auth for auth in field_set if auth not in field_dict.keys()]}")
         return create_dictionary(connexion, existence_query, field_set)
     return field_dict
     
