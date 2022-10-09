@@ -7,36 +7,38 @@ from sys import exit
 
 def main():
     connexion = ms.connect(**mysql_conn_params)
-    try:
-        prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
-        data_insertion(connexion, prep_data)
-        print("C'est dans la db!")
-    except:
-        print("Erreur !")
-        exit()
+    # try:
+    prep_data = prepare_data_for_insertion(connexion, 'json_books.json')
+    #     data_insertion(connexion, prep_data)
+    #     print("C'est dans la db!")
+    # except:
+    #     print("Erreur !")
+    #     exit()
     connexion.close()
 
 def prepare_data_for_insertion(connexion, data_file):
     books_init = load_file(data_file)
 
-    if (books := book_not_present_in_database(connexion, books_init)):
+    books = book_not_present_in_database(connexion, books_init)
 
         # Individualise authors initially grouped by book
-        books = splitting_authors(books)
+    splitting_authors(books)
+    print(books)
 
-        # Creating sets for following dictionary constitution with mysql
-        authors_set = create_set_from_list(books, 'author')
-        genres_set = create_set_from_list(books, 'tags')
-        publishers_set = { book['publisher'] for book in books }
+        # # Creating sets for following dictionary constitution with mysql
+    authors_set = create_set_from_list(books, 'author')
+    print(authors_set)
+        # genres_set = create_set_from_list(books, 'tags')
+        # publishers_set = { book['publisher'] for book in books }
 
-        # Creating dicts
-        authors_dict = return_complete_dict(connexion, 'author', authors_set)
-        genres_dict = return_complete_dict(connexion, 'tags', genres_set)
-        publishers_dict = return_complete_dict(connexion, 'publisher', publishers_set)
+        # # Creating dicts
+        # authors_dict = return_complete_dict(connexion, 'author', authors_set)
+        # genres_dict = return_complete_dict(connexion, 'tags', genres_set)
+        # publishers_dict = return_complete_dict(connexion, 'publisher', publishers_set)
 
-        # Swapping data in the list of books
-        strings_to_id_lists(books, authors_dict, genres_dict, publishers_dict)
-        return books
+        # # Swapping data in the list of books
+        # strings_to_id_lists(books, authors_dict, genres_dict, publishers_dict)
+        # return books
 
 def load_file(data_file):
     with open(data_file) as file:
@@ -90,8 +92,6 @@ def splitting_authors(books_list):
     '''For every book in the book list, splits the multiple authors 
     and set the author field as a list of every individual authors
     so that it's easier to replace their name by their database id.'''
-    authors = [book['author'].split(', ') for book in books_list if book['author'].find(', ') != -1]
-
     for book in books_list:
         for author in book['author']:
             if author.find(',') != -1:
