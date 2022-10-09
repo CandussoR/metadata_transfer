@@ -12,14 +12,15 @@ def main():
         data_insertion(connexion, prep_data)
         print("C'est dans la db!")
     except:
-        print("Houston on a eu un problème, on arrête tout!")
+        print("Erreur !")
         exit()
     connexion.close()
 
 def prepare_data_for_insertion(connexion, data_file):
     books_init = load_file(data_file)
 
-    if (books := book_not_present(connexion, books_init)):
+    if (books := book_not_present_in_database(connexion, books_init)):
+
         # Individualise authors initially grouped by book
         books = splitting_authors(books)
 
@@ -28,7 +29,7 @@ def prepare_data_for_insertion(connexion, data_file):
         genres_set = create_set_from_list(books, 'tags')
         publishers_set = { book['publisher'] for book in books }
 
-        #Creating dicts
+        # Creating dicts
         authors_dict = return_complete_dict(connexion, 'author', authors_set)
         genres_dict = return_complete_dict(connexion, 'tags', genres_set)
         publishers_dict = return_complete_dict(connexion, 'publisher', publishers_set)
@@ -41,13 +42,13 @@ def load_file(data_file):
     with open(data_file) as file:
         return json.load(file)
 
-def book_not_present(connexion, book_list):
+def book_not_present_in_database(connexion, book_list):
     title_dict = title_check(connexion, [ [book['title'].lower(), book['author']] for book in book_list])
     return list(filter(lambda x: x['title'].lower() not in title_dict, book_list))
 
 def title_check(connexion, iterable):
     '''
-    Collected works often have the same general title, so we need to check the author(s).
+    Collected works often have the same general title, so we need to check the author too.
     '''
     cursor = connexion.cursor(buffered=True)
     title_query = "SELECT id FROM ebooks WHERE title IN (%s)"
@@ -63,7 +64,6 @@ def title_check(connexion, iterable):
     return already_there
 
 def check_same_author(connexion, id, author):
-    print(f"author: {author}")
     query = '''SELECT full_name
                     FROM (SELECT id, title FROM ebooks
                         WHERE id = %s) e
@@ -86,12 +86,12 @@ def check_same_author(connexion, id, author):
         if db_authors == authors:
             return id
 
-
-
 def splitting_authors(books_list):
     '''For every book in the book list, splits the multiple authors 
     and set the author field as a list of every individual authors
     so that it's easier to replace their name by their database id.'''
+    authors = [book['author'].split(', ') for book in books_list if book['author'].find(', ') != -1]
+
     for book in books_list:
         for author in book['author']:
             if author.find(',') != -1:
@@ -102,8 +102,10 @@ def create_set_from_list(books_list, field):
     return { item for book in books_list for item in book[field] }
 
 def return_complete_dict(connexion, field, field_set):
-    '''Field is a string, field_set a set. Procedure extracted to shorten prepare_data_for_insertion. 
-    It creates a first dictionary from a set, insert what isn't in the dictionary then completes it.'''
+    '''
+    Field is a string, field_set a set. Procedure extracted to shorten prepare_data_for_insertion. 
+    It creates a first dictionary from a set, insert what isn't in the dictionary then completes it.
+    '''
 
     existence_query, insert_query = select_queries(field)
     field_dict = create_dictionary(connexion, existence_query, field_set)
@@ -172,8 +174,9 @@ def append_dictionary(connexion, query, iterable, dictionary):
 
 def strings_to_id_lists(data_list, authors_dict, genres_dict, publishers_dict):
     '''
-    Since there are only three fields (authors, tags and publisher) are to be modified,
-    they are hard-coded.'''
+    Since only three fields (authors, tags and publisher) are to be modified,
+    they are hard-coded.
+    '''
     for obj in data_list:
         obj['author'] = [authors_dict[k] for k in obj['author']]
         obj['tags'] = [genres_dict[k] for k in obj['tags']]
